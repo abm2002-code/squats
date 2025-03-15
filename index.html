@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Squat Detector</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <style>
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        video {
+            transform: scaleX(-1);
+        }
+    </style>
+</head>
+<body>
+    <video id="video" width="640" height="480" autoplay></video>
+    <canvas id="canvas" width="640" height="480"></canvas>
+    <p>Squat Count: <span id="squat-count">0</span></p>
+    <audio id="foot-audio" src="feet.mp3"></audio>
+    <audio id="back-audio" src="back.mp3"></audio>
+
+    <script>
+        const video = document.getElementById("video");
+        const canvas = document.getElementById("canvas");
+        const ctx = canvas.getContext("2d");
+        const squatCountDisplay = document.getElementById("squat-count");
+        const footAudio = document.getElementById("foot-audio");
+        const backAudio = document.getElementById("back-audio");
+
+        let squatCount = 0;
+        let performedSquat = false;
+
+        async function setupCamera() {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: true
+            });
+            video.srcObject = stream;
+            return new Promise(resolve => {
+                video.onloadedmetadata = () => resolve(video);
+            });
+        }
+
+        function findGradient(point1, point2) {
+            const [x1, y1] = point1;
+            const [x2, y2] = point2;
+            return x2 - x1 !== 0 ? (y2 - y1) / (x2 - x1) : Infinity;
+        }
+
+        async function detectPose() {
+            const pose = new Pose({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+            });
+
+            pose.setOptions({
+                modelComplexity: 1,
+                smoothLandmarks: true,
+                enableSegmentation: false,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+
+            pose.onResults((results) => {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                if (results.poseLandmarks) {
+                    const landmarks = results.poseLandmarks;
+                    const w = canvas.width;
+                    const h = canvas.height;
+
+                    const rightShoulder = landmarks[12];
+                    const rightHip = landmarks[24];
+                    const rightKnee = landmarks[26];
+                    const rightHeel = landmarks[30];
+                    const rightToes = landmarks[32];
+
+                    const rightShoulderCoords = [rightShoulder.x * w, rightShoulder.y * h];
+                    const rightHipCoords = [rightHip.x * w, rightHip.y * h];
+                    const rightKneeCoords = [rightKnee.x * w, rightKnee.y * h];
+                    const rightHeelCoords = [rightHeel.x * w, rightHeel.y * h];
+                    const rightToesCoords = [rightToes.x * w, rightToes.y * h];
+
+                    // Calculate gradients
+                    const shoulderHipGradient = findGradient(rightShoulderCoords, rightHipCoords);
+                    const footGradient = findGradient(rightHeelCoords, rightToesCoords);
+
+                    let backMistake = false;
+                    let footMistake = false;
+
+                    if (Math.abs(shoulderHipGradient) < 0.6) {
+                        backMistake = true;
+                        ctx.fillStyle = "red";
+                        ctx.fillText("Back Not Straight", 50, 50);
+                    } else {
+                        ctx.fillStyle = "green";
+                        ctx.fillText("Back Straight", 50, 50);
+                    }
+
+                    if (Math.abs(footGradient) > 0.3) {
+                        footMistake = true;
+                        ctx.fillStyle = "red";
+                        ctx.fillText("Feet Not Flat", 50, 100);
+                    } else {
+                        ctx.fillStyle = "green";
+                        ctx.fillText("Feet Flat", 50, 100);
+                    }
+
+                    const verticalDistance = Math.abs(rightHipCoords[1] - rightKneeCoords[1]);
+
+                    if (verticalDistance < 50) {
+                        performedSquat = true;
+                    } else if (verticalDistance >= 50 && performedSquat) {
+                        performedSquat = false;
+                        squatCount++;
+                        squatCountDisplay.innerText = squatCount;
+
+                        if (footMistake) footAudio.play();
+                        if (backMistake) backAudio.play();
+                    }
+
+                    // Draw key points
+                    function drawCircle(coords, color) {
+                        ctx.beginPath();
+                        ctx.arc(coords[0], coords[1], 5, 0, 2 * Math.PI);
+                        ctx.fillStyle = color;
+                        ctx.fill();
+                    }
+
+                    drawCircle(rightShoulderCoords, "green");
+                    drawCircle(rightHipCoords, "red");
+                    drawCircle(rightKneeCoords, "blue");
+                    drawCircle(rightHeelCoords, "yellow");
+                    drawCircle(rightToesCoords, "purple");
+
+                    // Draw lines
+                    ctx.strokeStyle = "green";
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(...rightShoulderCoords);
+                    ctx.lineTo(...rightHipCoords);
+                    ctx.stroke();
+
+                    ctx.strokeStyle = "blue";
+                    ctx.beginPath();
+                    ctx.moveTo(...rightHeelCoords);
+                    ctx.lineTo(...rightToesCoords);
+                    ctx.stroke();
+                }
+            });
+
+            await setupCamera();
+            video.play();
+            pose.send({ image: video });
+            setInterval(() => pose.send({ image: video }), 100);
+        }
+
+        detectPose();
+    </script>
+</body>
+</html>
