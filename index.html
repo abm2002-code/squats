@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Squat Pose Detection</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
+    <style>
+        body { text-align: center; font-family: Arial, sans-serif; }
+        video, canvas { position: absolute; left: 50%; transform: translateX(-50%); top: 10%; }
+        #warning { position: absolute; top: 5%; left: 50%; transform: translateX(-50%); color: red; font-size: 24px; font-weight: bold; }
+        #stats { position: absolute; top: 80%; left: 10%; color: white; font-size: 18px; text-align: left; }
+    </style>
+</head>
+<body>
+    <video id="video" autoplay playsinline></video>
+    <canvas id="canvas"></canvas>
+    <div id="warning"></div>
+    <div id="stats"></div>
+    <audio id="kneeAudio" src="knee_warning.mp3" preload="auto"></audio>
+    <audio id="backAudio" src="back_warning.mp3" preload="auto"></audio>
+    
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const warningText = document.getElementById('warning');
+        const statsText = document.getElementById('stats');
+        const kneeAudio = document.getElementById('kneeAudio');
+        const backAudio = document.getElementById('backAudio');
+        
+        // Variables for rep counting
+        let repCount = 0;
+        let isSquatting = false;
+        let isAudioPlaying = false;
+        
+        const pose = new Pose({ locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
+        pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+
+        navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
+            video.srcObject = stream;
+            video.onloadedmetadata = () => {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+            };
+        });
+
+        function calculateAngle(a, b, c) {
+            const ba = { x: a.x - b.x, y: a.y - b.y };
+            const bc = { x: c.x - b.x, y: c.y - b.y };
+            const dotProduct = ba.x * bc.x + ba.y * bc.y;
+            const magnitudeBA = Math.sqrt(ba.x ** 2 + ba.y ** 2);
+            const magnitudeBC = Math.sqrt(bc.x ** 2 + bc.y ** 2);
+            const angle = Math.acos(dotProduct / (magnitudeBA * magnitudeBC)) * (180 / Math.PI);
+            return angle;
+        }
+        
+        function playFeedback(audioElement) {
+            if (!isAudioPlaying && audioElement.paused) {
+                isAudioPlaying = true;
+                audioElement.play();
+                audioElement.onended = () => {
+                    isAudioPlaying = false;
+                };
+            }
+        }
+
+        pose.onResults(results => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            if (results.poseLandmarks) {
+                // Draw pose landmarks and connections
+                drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS, { color: '#00FF00', lineWidth: 4 });
+                drawLandmarks(ctx, results.poseLandmarks, { color: '#FF0000', lineWidth: 2 });
+
+                const landmarks = results.poseLandmarks;
+                
+                // Get required landmarks for squat form analysis
+                const leftHip = landmarks[23]; // LEFT_HIP
+                const leftKnee = landmarks[25]; // LEFT_KNEE
+                const leftAnkle = landmarks[27]; // LEFT_ANKLE
+                const leftShoulder = landmarks[11]; // LEFT_SHOULDER
+                
+                // Calculate angles for form analysis
+                const kneeAngle = calculateAngle(leftHip, leftKnee, leftAnkle);
+                const backAngle = calculateAngle(
+                    { x: leftShoulder.x, y: leftShoulder.y },
+                    { x: leftHip.x, y: leftHip.y },
+                    { x: leftHip.x + 0.1, y: leftHip.y } // Point to the right of hip for vertical reference
+                );
+                
+                // Display angles
+                ctx.fillStyle = "white";
+                ctx.font = "18px Arial";
+                ctx.fillText(`Knee Angle: ${Math.round(kneeAngle)}°`, 50, 50);
+                ctx.fillText(`Back Angle: ${Math.round(backAngle)}°`, 50, 80);
+                
+                // Check for rep counting (when knee angle goes below threshold and back up)
+                if (kneeAngle < 110 && !isSquatting) {
+                    isSquatting = true;
+                } else if (kneeAngle > 160 && isSquatting) {
+                    isSquatting = false;
+                    repCount++;
+                }
+                
+                // Check for form issues
+                const kneeIssue = kneeAngle < 70; // Knees shouldn't bend too much
+                const backIssue = backAngle < 70 || backAngle > 110; // Back should be relatively straight
+                
+                // Handle warnings and audio feedback
+                if (kneeIssue) {
+                    warningText.innerText = "Watch your knee position!";
+                    playFeedback(kneeAudio);
+                } 
+                else if (backIssue) {
+                    warningText.innerText = "Keep your back straight!";
+                    playFeedback(backAudio);
+                }
+                else {
+                    warningText.innerText = "";
+                }
+                
+                // Update stats
+                statsText.innerText = `Squat Count: ${repCount}`;
+            }
+        });
+
+        const camera = new Camera(video, {
+            onFrame: async () => { await pose.send({ image: video }); },
+            width: 640,
+            height: 480
+        });
+        camera.start();
+    </script>
+</body>
+</html>
