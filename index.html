@@ -1,139 +1,623 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Squat Pose Detection</title>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
-    <style>
-        body { text-align: center; font-family: Arial, sans-serif; }
-        video, canvas { position: absolute; left: 50%; transform: translateX(-50%); top: 10%; }
-        #warning { position: absolute; top: 5%; left: 50%; transform: translateX(-50%); color: red; font-size: 24px; font-weight: bold; }
-        #stats { position: absolute; top: 80%; left: 10%; color: white; font-size: 18px; text-align: left; }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Squats Pose Detection</title>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
+  <style>
+    /* FitFlex Theme - Black and Green */
+    :root {
+      --fitflex-green: #00ff7f;
+      --fitflex-dark: #121212;
+      --fitflex-darker: #0a0a0a;
+      --fitflex-light-dark: #1e1e1e;
+    }
+    
+    body {
+      font-family: 'Arial', sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: var(--fitflex-darker);
+      color: white;
+    }
+    
+    .container {
+      position: relative;
+      width: 100%;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    
+    .app-header {
+      width: 100%;
+      background-color: var(--fitflex-dark);
+      padding: 12px 0;
+      text-align: center;
+      position: relative;
+      border-bottom: 1px solid rgba(0, 255, 127, 0.2);
+    }
+    
+    .app-title {
+      color: var(--fitflex-green);
+      font-size: 24px;
+      font-weight: bold;
+      margin: 0;
+    }
+    
+    .app-subtitle {
+      color: white;
+      font-size: 14px;
+      margin: 2px 0 0 0;
+    }
+    
+    .video-container {
+      position: relative;
+      width: 100%;
+      max-width: 640px;
+      margin-top: 20px;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 2px solid var(--fitflex-green);
+    }
+    
+    video, canvas {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    
+    #warning {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #ff3b30;
+      font-size: 18px;
+      font-weight: bold;
+      text-shadow: 0px 0px 4px rgba(0, 0, 0, 0.8);
+      background-color: rgba(0, 0, 0, 0.6);
+      padding: 5px 15px;
+      border-radius: 20px;
+      z-index: 5;
+    }
+    
+    #controls {
+      margin-top: 20px;
+      width: 100%;
+      max-width: 640px;
+      background-color: var(--fitflex-light-dark);
+      padding: 15px 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+      text-align: center;
+      border: 1px solid rgba(0, 255, 127, 0.3);
+    }
+    
+    #results {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background-color: var(--fitflex-dark);
+      color: white;
+      padding: 25px;
+      border-radius: 15px;
+      display: none;
+      z-index: 10;
+      min-width: 300px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+      border: 2px solid var(--fitflex-green);
+    }
+    
+    .results-title {
+      color: var(--fitflex-green);
+      margin-top: 0;
+      text-align: center;
+    }
+    
+    .button {
+      padding: 12px 24px;
+      margin: 0 8px;
+      border: none;
+      border-radius: 30px;
+      cursor: pointer;
+      font-weight: bold;
+      font-size: 16px;
+      transition: all 0.2s ease;
+    }
+    
+    .start {
+      background-color: var(--fitflex-green);
+      color: var(--fitflex-dark);
+    }
+    
+    .stop {
+      background-color: #ff3b30;
+      color: white;
+    }
+    
+    .reset {
+      background-color: #007aff;
+      color: white;
+    }
+    
+    .close {
+      background-color: var(--fitflex-green);
+      color: var(--fitflex-dark);
+      width: 100%;
+      margin-top: 20px;
+    }
+    
+    .button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 255, 127, 0.4);
+    }
+    
+    .timer {
+      font-size: 32px;
+      margin: 5px 0 15px 0;
+      font-weight: bold;
+      color: var(--fitflex-green);
+    }
+    
+    .stats-container {
+      margin: 15px 0;
+      text-align: left;
+    }
+    
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      margin: 10px 0;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .stat-label {
+      color: #aaaaaa;
+    }
+    
+    .stat-value {
+      color: var(--fitflex-green);
+      font-weight: bold;
+    }
+    
+    .hidden {
+      display: none;
+    }
+    
+    .angle-display {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      background-color: rgba(0, 0, 0, 0.7);
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 14px;
+      z-index: 5;
+      border: 1px solid var(--fitflex-green);
+    }
+    
+    .angle-value {
+      color: var(--fitflex-green);
+      font-weight: bold;
+    }
+    
+    /* Responsive styles */
+    @media (max-width: 768px) {
+      .container {
+        padding: 0 10px;
+      }
+      
+      .video-container {
+        max-width: 100%;
+      }
+      
+      #controls {
+        max-width: 100%;
+        padding: 10px;
+      }
+      
+      .button {
+        padding: 10px 16px;
+        margin: 0 4px;
+        font-size: 14px;
+      }
+      
+      .timer {
+        font-size: 28px;
+      }
+      
+      .app-title {
+        font-size: 20px;
+      }
+      
+      .app-subtitle {
+        font-size: 12px;
+      }
+      
+      #results {
+        width: 90%;
+        max-width: 350px;
+        padding: 15px;
+      }
+    }
+    
+    @media (max-width: 480px) {
+      .button {
+        padding: 8px 12px;
+        margin: 0 2px;
+        font-size: 12px;
+      }
+      
+      .timer {
+        font-size: 24px;
+      }
+      
+      .angle-display {
+        font-size: 12px;
+        padding: 4px 8px;
+      }
+      
+      #warning {
+        font-size: 14px;
+        padding: 4px 10px;
+      }
+    }
+  </style>
 </head>
 <body>
-    <video id="video" autoplay playsinline></video>
-    <canvas id="canvas"></canvas>
-    <div id="warning"></div>
-    <div id="stats"></div>
-    <audio id="kneeAudio" src="knee_warning.mp3" preload="auto"></audio>
-    <audio id="backAudio" src="back_warning.mp3" preload="auto"></audio>
+  <div class="container">
+    <div class="app-header">
+      <h1 class="app-title">FITFLEX</h1>
+      <p class="app-subtitle">Squats Pose Detection</p>
+    </div>
     
-    <script>
-        const video = document.getElementById('video');
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        const warningText = document.getElementById('warning');
-        const statsText = document.getElementById('stats');
-        const kneeAudio = document.getElementById('kneeAudio');
-        const backAudio = document.getElementById('backAudio');
-        
-        // Variables for rep counting
-        let repCount = 0;
-        let isSquatting = false;
-        let isAudioPlaying = false;
-        
-        const pose = new Pose({ locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
-        pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+    <div class="video-container">
+      <video id="video" autoplay playsinline></video>
+      <canvas id="canvas"></canvas>
+      <div id="warning"></div>
+      <div class="angle-display">
+        Left: <span id="left-angle" class="angle-value">0°</span> | 
+        Right: <span id="right-angle" class="angle-value">0°</span>
+      </div>
+    </div>
+    
+    <div id="controls">
+      <div class="timer" id="exercise-time">00:00</div>
+      <button id="start-button" class="button start">Start Workout</button>
+      <button id="stop-button" class="button stop hidden">End Workout</button>
+      <button id="reset-button" class="button reset hidden">Reset</button>
+    </div>
+    
+    <div id="results">
+      <h2 class="results-title">Workout Complete</h2>
+      <div class="stats-container">
+        <div class="stat-row">
+          <span class="stat-label">Total Time:</span>
+          <span id="total-time" class="stat-value">00:00</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Total Reps:</span>
+          <span id="rep-count" class="stat-value">0</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Total Mistakes:</span>
+          <span id="mistake-count" class="stat-value">0</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Mistakes per Min:</span>
+          <span id="mistake-rate" class="stat-value">0</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Form Quality:</span>
+          <span id="form-quality" class="stat-value">Good</span>
+        </div>
+      </div>
+      <button id="close-results" class="button close">Close</button>
+    </div>
+  </div>
+  
+  <script>
+    // DOM Elements
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const warningText = document.getElementById('warning');
+    const exerciseTimeElement = document.getElementById('exercise-time');
+    const totalTimeElement = document.getElementById('total-time');
+    const repCountElement = document.getElementById('rep-count');
+    const mistakeCountElement = document.getElementById('mistake-count');
+    const mistakeRateElement = document.getElementById('mistake-rate');
+    const formQualityElement = document.getElementById('form-quality');
+    const startButton = document.getElementById('start-button');
+    const stopButton = document.getElementById('stop-button');
+    const resetButton = document.getElementById('reset-button');
+    const resultsPanel = document.getElementById('results');
+    const closeResultsButton = document.getElementById('close-results');
+    const leftAngleElement = document.getElementById('left-angle');
+    const rightAngleElement = document.getElementById('right-angle');
 
-        navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
-            video.srcObject = stream;
-            video.onloadedmetadata = () => {
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-            };
+    // State variables
+    let mistakeCount = 0;
+    let repCount = 0;
+    let isInMistakeState = false;
+    let exerciseStartTime = 0;
+    let exerciseTimer;
+    let isExercising = false;
+    let totalExerciseTime = 0;
+    let isInSquatPosition = false;
+    let lastWarningTime = 0;
+
+    // Initialize pose detection
+    const pose = new Pose({ locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
+    pose.setOptions({
+      modelComplexity: 1,
+      smoothLandmarks: true,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
+
+    // Setup camera
+    function setupCamera() {
+      navigator.mediaDevices.getUserMedia({ video: true })
+        .then(stream => {
+          video.srcObject = stream;
+          video.onloadedmetadata = () => {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            video.play();
+          };
+        })
+        .catch(err => {
+          console.error('Error accessing the camera: ', err);
+          warningText.innerText = 'Camera access denied. Please allow camera access and reload.';
         });
+    }
 
-        function calculateAngle(a, b, c) {
-            const ba = { x: a.x - b.x, y: a.y - b.y };
-            const bc = { x: c.x - b.x, y: c.y - b.y };
-            const dotProduct = ba.x * bc.x + ba.y * bc.y;
-            const magnitudeBA = Math.sqrt(ba.x ** 2 + ba.y ** 2);
-            const magnitudeBC = Math.sqrt(bc.x ** 2 + bc.y ** 2);
-            const angle = Math.acos(dotProduct / (magnitudeBA * magnitudeBC)) * (180 / Math.PI);
-            return angle;
+    // Button event listeners
+    startButton.addEventListener('click', startExercise);
+    stopButton.addEventListener('click', stopExercise);
+    resetButton.addEventListener('click', resetExercise);
+    closeResultsButton.addEventListener('click', closeResults);
+
+    function startExercise() {
+      isExercising = true;
+      mistakeCount = 0;
+      repCount = 0;
+      isInMistakeState = false;
+      
+      // Update UI
+      startButton.classList.add('hidden');
+      stopButton.classList.remove('hidden');
+      resetButton.classList.add('hidden');
+      
+      // Start timer
+      exerciseStartTime = Date.now();
+      exerciseTimer = setInterval(updateExerciseTime, 1000);
+    }
+
+    function stopExercise() {
+      isExercising = false;
+      clearInterval(exerciseTimer);
+      
+      // Calculate total time in seconds
+      totalExerciseTime = Math.floor((Date.now() - exerciseStartTime) / 1000);
+      
+      // Update UI
+      stopButton.classList.add('hidden');
+      resetButton.classList.remove('hidden');
+      
+      // Show results
+      displayResults();
+    }
+
+    function resetExercise() {
+      resetButton.classList.add('hidden');
+      startButton.classList.remove('hidden');
+      exerciseTimeElement.textContent = "00:00";
+      warningText.innerText = "";
+    }
+
+    function displayResults() {
+      const minutes = Math.floor(totalExerciseTime / 60);
+      const seconds = totalExerciseTime % 60;
+      totalTimeElement.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+      repCountElement.textContent = repCount;
+      mistakeCountElement.textContent = mistakeCount;
+      
+      const mistakesPerMinute = totalExerciseTime > 0 ?
+        ((mistakeCount / totalExerciseTime) * 60).toFixed(2) : 0;
+      mistakeRateElement.textContent = mistakesPerMinute;
+      
+      // Calculate form quality
+      let formQuality = "Excellent";
+      if (mistakeCount > repCount * 0.5) {
+        formQuality = "Poor";
+      } else if (mistakeCount > repCount * 0.2) {
+        formQuality = "Fair";
+      } else if (mistakeCount > repCount * 0.1) {
+        formQuality = "Good";
+      }
+      formQualityElement.textContent = formQuality;
+      
+      resultsPanel.style.display = 'block';
+    }
+
+    function closeResults() {
+      resultsPanel.style.display = 'none';
+    }
+
+    function updateExerciseTime() {
+      const elapsedTime = Math.floor((Date.now() - exerciseStartTime) / 1000);
+      const minutes = Math.floor(elapsedTime / 60);
+      const seconds = elapsedTime % 60;
+      exerciseTimeElement.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
+
+    function calculateAngle(a, b, c) {
+      const radians = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(a.y - b.y, a.x - b.x);
+      let angle = Math.abs(radians * 180.0 / Math.PI);
+      if (angle > 180.0) {
+        angle = 360 - angle;
+      }
+      return angle;
+    }
+
+    function detectSquats(landmarks) {
+      // Get relevant landmarks for squats
+      const leftHip = landmarks[23];
+      const leftKnee = landmarks[25];
+      const leftAnkle = landmarks[27];
+      
+      const rightHip = landmarks[24];
+      const rightKnee = landmarks[26];
+      const rightAnkle = landmarks[28];
+      
+      // Calculate knee angles
+      const leftKneeAngle = calculateAngle(leftHip, leftKnee, leftAnkle);
+      const rightKneeAngle = calculateAngle(rightHip, rightKnee, rightAnkle);
+      
+      // Update angle display
+      leftAngleElement.textContent = `${Math.round(leftKneeAngle)}°`;
+      rightAngleElement.textContent = `${Math.round(rightKneeAngle)}°`;
+      
+      // Check for proper form
+      if (isExercising) {
+        // Define acceptable angle ranges for squats
+        const minAngle = 70;  // Minimum angle when in squat position
+        const maxAngle = 170; // Maximum angle when standing
+        
+        // Check if in squat position (knees bent)
+        const isLeftLegBent = leftKneeAngle < minAngle + 20;
+        const isRightLegBent = rightKneeAngle < minAngle + 20;
+        
+        // Check if in standing position
+        const isLeftLegStraight = leftKneeAngle > maxAngle - 20;
+        const isRightLegStraight = rightKneeAngle > maxAngle - 20;
+        
+        // Rep counting logic
+        if (isLeftLegBent && isRightLegBent && !isInSquatPosition) {
+          isInSquatPosition = true;
+        } else if (isLeftLegStraight && isRightLegStraight && isInSquatPosition) {
+          isInSquatPosition = false;
+          repCount++;
         }
         
-        function playFeedback(audioElement) {
-            if (!isAudioPlaying && audioElement.paused) {
-                isAudioPlaying = true;
-                audioElement.play();
-                audioElement.onended = () => {
-                    isAudioPlaying = false;
-                };
-            }
+        // Form checking
+        let isMistake = false;
+        let warningMessage = "";
+        
+        // Check if knees are going too far forward (past toes)
+        const leftKneeForward = leftKnee.x > leftAnkle.x + 0.05;
+        const rightKneeForward = rightKnee.x < rightAnkle.x - 0.05;
+        
+        if (leftKneeForward || rightKneeForward) {
+          isMistake = true;
+          warningMessage = "Keep knees behind toes";
         }
-
-        pose.onResults(results => {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-            if (results.poseLandmarks) {
-                // Draw pose landmarks and connections
-                drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS, { color: '#00FF00', lineWidth: 4 });
-                drawLandmarks(ctx, results.poseLandmarks, { color: '#FF0000', lineWidth: 2 });
-
-                const landmarks = results.poseLandmarks;
-                
-                // Get required landmarks for squat form analysis
-                const leftHip = landmarks[23]; // LEFT_HIP
-                const leftKnee = landmarks[25]; // LEFT_KNEE
-                const leftAnkle = landmarks[27]; // LEFT_ANKLE
-                const leftShoulder = landmarks[11]; // LEFT_SHOULDER
-                
-                // Calculate angles for form analysis
-                const kneeAngle = calculateAngle(leftHip, leftKnee, leftAnkle);
-                const backAngle = calculateAngle(
-                    { x: leftShoulder.x, y: leftShoulder.y },
-                    { x: leftHip.x, y: leftHip.y },
-                    { x: leftHip.x + 0.1, y: leftHip.y } // Point to the right of hip for vertical reference
-                );
-                
-                // Display angles
-                ctx.fillStyle = "white";
-                ctx.font = "18px Arial";
-                ctx.fillText(`Knee Angle: ${Math.round(kneeAngle)}°`, 50, 50);
-                ctx.fillText(`Back Angle: ${Math.round(backAngle)}°`, 50, 80);
-                
-                // Check for rep counting (when knee angle goes below threshold and back up)
-                if (kneeAngle < 110 && !isSquatting) {
-                    isSquatting = true;
-                } else if (kneeAngle > 160 && isSquatting) {
-                    isSquatting = false;
-                    repCount++;
-                }
-                
-                // Check for form issues
-                const kneeIssue = kneeAngle < 70; // Knees shouldn't bend too much
-                const backIssue = backAngle < 70 || backAngle > 110; // Back should be relatively straight
-                
-                // Handle warnings and audio feedback
-                if (kneeIssue) {
-                    warningText.innerText = "Watch your knee position!";
-                    playFeedback(kneeAudio);
-                } 
-                else if (backIssue) {
-                    warningText.innerText = "Keep your back straight!";
-                    playFeedback(backAudio);
-                }
-                else {
-                    warningText.innerText = "";
-                }
-                
-                // Update stats
-                statsText.innerText = `Squat Count: ${repCount}`;
+        
+        // Check if back is not straight
+        const shoulderMidpoint = {
+          x: (landmarks[11].x + landmarks[12].x) / 2,
+          y: (landmarks[11].y + landmarks[12].y) / 2
+        };
+        
+        const hipMidpoint = {
+          x: (leftHip.x + rightHip.x) / 2,
+          y: (leftHip.y + rightHip.y) / 2
+        };
+        
+        const backAngle = Math.abs(Math.atan2(shoulderMidpoint.y - hipMidpoint.y, shoulderMidpoint.x - hipMidpoint.x) * 180 / Math.PI);
+        
+        if (backAngle < 70 || backAngle > 110) {
+          isMistake = true;
+          warningMessage = "Keep your back straight";
+        }
+        
+        // Check if feet are not shoulder-width apart
+        const shoulderWidth = Math.abs(landmarks[11].x - landmarks[12].x);
+        const ankleWidth = Math.abs(leftAnkle.x - rightAnkle.x);
+        
+        if (ankleWidth < shoulderWidth * 0.7 || ankleWidth > shoulderWidth * 1.3) {
+          isMistake = true;
+          warningMessage = "Keep feet shoulder-width apart";
+        }
+        
+        // Display warning if there's a mistake
+        if (isMistake) {
+          const currentTime = Date.now();
+          if (!isInMistakeState || currentTime - lastWarningTime > 2000) {
+            warningText.innerText = warningMessage;
+            lastWarningTime = currentTime;
+            
+            if (!isInMistakeState) {
+              mistakeCount++;
+              isInMistakeState = true;
             }
-        });
+          }
+        } else {
+          if (isInMistakeState) {
+            warningText.innerText = "";
+            isInMistakeState = false;
+          }
+        }
+      }
+    }
 
-        const camera = new Camera(video, {
-            onFrame: async () => { await pose.send({ image: video }); },
-            width: 640,
-            height: 480
+    // Process results from pose detection
+    pose.onResults(results => {
+      // Draw the pose
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+      
+      if (results.poseLandmarks) {
+        // Draw pose landmarks
+        drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS, {
+          color: '#00FF7F',
+          lineWidth: 4
         });
-        camera.start();
-    </script>
+        drawLandmarks(ctx, results.poseLandmarks, {
+          color: '#FFFFFF',
+          lineWidth: 2,
+          radius: 6
+        });
+        
+        // Process the pose for squat detection
+        detectSquats(results.poseLandmarks);
+      }
+    });
+
+    // Initialize
+    setupCamera();
+    
+    // Start the pose detection
+    const camera = new Camera(video, {
+      onFrame: async () => {
+        await pose.send({image: video});
+      },
+      width: 640,
+      height: 480
+    });
+    camera.start();
+    
+    // Handle window resize for responsiveness
+    window.addEventListener('resize', handleResize);
+    
+    function handleResize() {
+      // Adjust canvas size if needed
+      if (video.videoWidth > 0) {
+        const containerWidth = document.querySelector('.video-container').clientWidth;
+        const scale = containerWidth / video.videoWidth;
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+      }
+    }
+  </script>
 </body>
 </html>
